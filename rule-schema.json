@@ -1,37 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/0o755/m3u8-ad-audio-rules/main/rule-schema.json",
-  "title": "m3u8 Ad Audio Rules",
+  "title": "m3u8 Ad Audio Probe Rules",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "revision", "algorithm", "rules"],
+  "required": ["format", "schemaVersion", "revision", "algorithm", "rules"],
   "properties": {
-    "schemaVersion": {"const": 3},
-    "revision": {"type": "integer", "minimum": 1},
-    "algorithm": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "sampleRate", "windowMs", "hopMs", "bandCount"],
-      "properties": {
-        "id": {"const": "spectral-sequence-v3"},
-        "sampleRate": {"const": 16000},
-        "windowMs": {"const": 512},
-        "hopMs": {"const": 256},
-        "bandCount": {"const": 16}
-      }
-    },
+    "format": {"const": "ad-audio-probe-rules"},
+    "schemaVersion": {"const": 1},
+    "revision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "algorithm": {"const": "spectral-sequence-v1"},
     "rules": {
       "type": "array",
-      "maxItems": 5000,
+      "maxItems": 1024,
       "items": {"$ref": "#/$defs/rule"}
-    },
-    "testUrls": {
-      "type": "object",
-      "additionalProperties": {"type": "string", "format": "uri"}
-    },
-    "testPositionsMs": {
-      "type": "object",
-      "additionalProperties": {"type": "integer", "minimum": 0}
     }
   },
   "$defs": {
@@ -40,29 +22,39 @@
       "additionalProperties": false,
       "required": ["id", "durationMs", "anchorOffsetMs", "anchorDurationMs", "fingerprints"],
       "properties": {
-        "id": {"type": "string", "minLength": 1, "maxLength": 128},
-        "durationMs": {"type": "integer", "minimum": 512},
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+        "durationMs": {"type": "integer", "minimum": 5000, "maximum": 600000},
         "anchorOffsetMs": {"type": "integer", "minimum": 0},
-        "anchorDurationMs": {"type": "integer", "minimum": 512},
+        "anchorDurationMs": {"const": 5000},
         "fingerprints": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 4,
           "maxItems": 4,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["offsetMs", "hashes"],
+            "required": ["phaseMs", "hashes"],
             "properties": {
-              "offsetMs": {"type": "integer"},
+              "phaseMs": {"enum": [0, 64, 128, 192]},
               "hashes": {
                 "type": "array",
                 "minItems": 4,
-                "maxItems": 128,
-                "items": {"type": "string", "pattern": "^[0-9a-fA-F]{8}$"}
+                "maxItems": 64,
+                "items": {"type": "string", "pattern": "^[0-9a-f]{8}$"}
               }
             }
           }
-        }
+        },
+        "test": {"$ref": "#/$defs/test"}
+      }
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "adStartMs"],
+      "properties": {
+        "url": {"type": "string", "format": "uri", "maxLength": 8192},
+        "adStartMs": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
       }
     }
   }

@@ -94,8 +94,12 @@ async function readStatus(env) {
       env
     );
     const paths = Array.isArray(tree.tree) ? tree.tree.map(item => item.path || "") : [];
-    result.pendingRules = paths.filter(path => path.startsWith("candidates/") && isDataFile(path)).length;
-    result.submissions = paths.filter(path => path.startsWith("submissions/") && isDataFile(path)).length;
+    result.pendingRules = paths.filter(path => (
+      path.startsWith("submissions/") || path.startsWith("candidates/")
+    ) && isDataFile(path)).length;
+    result.submissions = paths.filter(path => (
+      path.startsWith("submissions/") || path.startsWith("archive/submissions/")
+    ) && isDataFile(path)).length;
   } catch {
     // GitHub API 不可用时保留已读取的规则数量，其余统计为 0。
   }
@@ -161,8 +165,7 @@ async function receiveSubmission(request, env) {
   }
   try {
     const payload = await readSubmissionBody(request);
-    const document = normalizeSubmissionDocument(payload && payload.document
-      ? payload.document : payload);
+    const document = payload && payload.document ? payload.document : payload;
     validateSubmissionDocument(document);
     const digest = await sha256Hex(JSON.stringify(document));
     const path = `submissions/${digest}.json`;
@@ -215,66 +218,12 @@ function validateSubmissionDocument(document) {
   if (!document || typeof document !== "object" || Array.isArray(document)) {
     throw new Error("提交缺少规则文档");
   }
-  if (document.schemaVersion !== 3 || !Number.isSafeInteger(document.revision)
-      || document.revision < 1 || !document.algorithm
-      || document.algorithm.id !== "spectral-sequence-v3"
-      || !Array.isArray(document.rules) || document.rules.length > 5000) {
-    throw new Error("提交不是有效的 schemaVersion 3 规则文档");
+  if (document.format !== "ad-audio-probe-rules"
+      || document.schemaVersion !== 1 || document.algorithm !== "spectral-sequence-v1"
+      || !Number.isSafeInteger(document.revision) || document.revision < 1
+      || !Array.isArray(document.rules) || document.rules.length > 1024) {
+    throw new Error("提交不是有效的 Probe SDK rules-v1 文档");
   }
-}
-
-function normalizeSubmissionDocument(document) {
-  if (!document || typeof document !== "object" || Array.isArray(document)) {
-    throw new Error("提交缺少规则文档");
-  }
-  if (document.schemaVersion === 3) return document;
-  if (document.schemaVersion !== 1
-      || document.format !== "ad-audio-probe-rules"
-      || document.algorithm !== "spectral-sequence-v1"
-      || !Array.isArray(document.rules)) {
-    throw new Error("提交不是支持的规则文档");
-  }
-
-  const testUrls = { ...(document.testUrls || {}) };
-  const testPositionsMs = { ...(document.testPositionsMs || {}) };
-  const rules = document.rules.map((rule) => {
-    if (!rule || typeof rule !== "object" || !Array.isArray(rule.fingerprints)) {
-      throw new Error("提交规则结构无效");
-    }
-    const fingerprints = rule.fingerprints.map((fingerprint) => ({
-      offsetMs: fingerprint.phaseMs,
-      hashes: fingerprint.hashes
-    }));
-    if (rule.test && typeof rule.test === "object") {
-      if (rule.test.url) testUrls[rule.id] = rule.test.url;
-      if (Number.isSafeInteger(rule.test.adStartMs)) {
-        testPositionsMs[rule.id] = rule.test.adStartMs;
-      }
-    }
-    return {
-      id: rule.id,
-      durationMs: rule.durationMs,
-      anchorOffsetMs: rule.anchorOffsetMs,
-      anchorDurationMs: rule.anchorDurationMs,
-      fingerprints
-    };
-  });
-  const converted = {
-    schemaVersion: 3,
-    revision: Number.isSafeInteger(document.revision) && document.revision > 0
-      ? document.revision : 1,
-    algorithm: {
-      id: "spectral-sequence-v3",
-      sampleRate: 16000,
-      windowMs: 512,
-      hopMs: 256,
-      bandCount: 16
-    },
-    rules
-  };
-  if (Object.keys(testUrls).length) converted.testUrls = testUrls;
-  if (Object.keys(testPositionsMs).length) converted.testPositionsMs = testPositionsMs;
-  return converted;
 }
 
 async function createInstallationToken(env) {

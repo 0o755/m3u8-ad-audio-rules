@@ -1,0 +1,122 @@
+{
+  "document": {
+    "schemaVersion": 3,
+    "revision": 2,
+    "algorithm": {
+      "id": "spectral-sequence-v3",
+      "sampleRate": 16000,
+      "windowMs": 512,
+      "hopMs": 256,
+      "bandCount": 16
+    },
+    "rules": [
+      {
+        "id": "auto-ad-530805f02f930909",
+        "durationMs": 11866,
+        "anchorOffsetMs": 0,
+        "anchorDurationMs": 5000,
+        "fingerprints": [
+          {
+            "offsetMs": 0,
+            "hashes": [
+              "5cff0007",
+              "14569417",
+              "74fb1c1f",
+              "39d9007f",
+              "3ad900cf",
+              "3cca0ee2",
+              "7de60467",
+              "00000000",
+              "00000000",
+              "36ff0007",
+              "23d500fd",
+              "2bf300ff",
+              "6cdb007f",
+              "28db005b",
+              "68fc080f",
+              "7df9000d",
+              "00000000",
+              "ad542556"
+            ]
+          },
+          {
+            "offsetMs": 64,
+            "hashes": [
+              "903ffc00",
+              "145e941f",
+              "7cf91c1f",
+              "31d9007f",
+              "3ad902cf",
+              "7cca0ee0",
+              "00000000",
+              "00000000",
+              "00000000",
+              "23fd001d",
+              "2bd500fd",
+              "29f3007f",
+              "6cd3047b",
+              "385b001f",
+              "68fc000f",
+              "00000000",
+              "00000000",
+              "ad5627f2"
+            ]
+          },
+          {
+            "offsetMs": 128,
+            "hashes": [
+              "983ef802",
+              "347a141f",
+              "3cf90c1d",
+              "39d9007f",
+              "3ec90eed",
+              "7cea0e60",
+              "00000000",
+              "00000000",
+              "00000000",
+              "23dd005d",
+              "2bd500fd",
+              "29f3003f",
+              "6cdb047b",
+              "397c001f",
+              "68fc000f",
+              "00000000",
+              "00000000",
+              "ee5607f2"
+            ]
+          },
+          {
+            "offsetMs": 192,
+            "hashes": [
+              "9856d807",
+              "34fb141f",
+              "38d90c5f",
+              "3bd9005f",
+              "3ecb0ee1",
+              "3ceb0061",
+              "00000000",
+              "00000000",
+              "00000000",
+              "23dd005d",
+              "2bd100ff",
+              "29fb007f",
+              "6cdb007b",
+              "387c000f",
+              "68fc000e",
+              "00000000",
+              "00000000"
+            ]
+          }
+        ]
+      }
+    ],
+    "testUrls": {
+      "auto-ad-530805f02f930909": "https://v13.wsyzym3u8.com/202607/15/R3Brjnm0gx27/video/index.m3u8"
+    },
+    "testPositionsMs": {
+      "auto-ad-530805f02f930909": 342000
+    }
+  },
+  "source": "collector",
+  "clientVersion": "collector"
+}

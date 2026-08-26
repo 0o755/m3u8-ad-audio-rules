@@ -1,0 +1,28 @@
+# Worker 写入 submissions 后自动校验、去重、过滤冲突并更新 rules.json。
+name: Merge submissions
+on:
+  push:
+    paths: ["submissions/**"]
+permissions:
+  contents: write
+concurrency:
+  group: rules-merge
+  cancel-in-progress: false
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Merge submissions
+        run: |
+          node tools/merge-submissions.mjs
+          node tools/validate-rules.mjs rules.json
+          git config user.name "m3u8-ad-audio-rules-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add rules.json submissions archive rejected
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: process rule submissions"
+          git push origin HEAD:main

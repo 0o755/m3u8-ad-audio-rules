@@ -1,0 +1,17 @@
+# 每次提交规则文件或工具时执行 schema v3 合同校验。
+name: Validate rules
+on:
+  push:
+    paths: ["rules.json", "rule-schema.json", "tools/**"]
+  pull_request:
+    paths: ["rules.json", "rule-schema.json", "tools/**"]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node tools/validate-rules.mjs rules.json

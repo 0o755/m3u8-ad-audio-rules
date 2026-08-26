@@ -30,6 +30,9 @@ export default {
         return jsonResponse(await readStatus(env));
       }
       if (url.pathname === "/rules.json") {
+        return proxyRulesJson(env);
+      }
+      if (url.pathname === "/rules.json") {
         return await proxyRulesJson(env);
       }
       if (url.pathname === "/v1/health") {
@@ -39,11 +42,7 @@ export default {
         if (request.method !== "POST") {
           return jsonResponse({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
         }
-        return jsonResponse({
-          ok: false,
-          error: "SUBMISSION_NOT_CONFIGURED",
-          message: "规则接收接口尚未部署，当前页面仅提供仓库状态读取。"
-        }, 501);
+        return receiveSubmission(request, env);
       }
       if (request.method !== "GET" || !["/", ""].includes(url.pathname)) {
         return new Response("Not Found", { status: 404, headers: corsHeaders() });
@@ -142,10 +141,259 @@ async function githubJson(url, env) {
   };
   if (env.GITHUB_READ_TOKEN) {
     headers.authorization = `Bearer ${env.GITHUB_READ_TOKEN}`;
+  } else if (env.GITHUB_APP_ID && env.GITHUB_INSTALLATION_ID
+      && env.GITHUB_APP_PRIVATE_KEY) {
+    try {
+      const token = await createInstallationToken(env);
+      headers.authorization = `Bearer ${token}`;
+    } catch {
+      // 统计读取失败时由上层保留安全的 0，不影响公开 rules.json。
+    }
   }
   const response = await fetch(url, { headers });
   if (!response.ok) throw new Error(`GitHub API ${response.status}`);
   return response.json();
+}
+
+async function receiveSubmission(request, env) {
+  if (!env.GITHUB_APP_ID || !env.GITHUB_INSTALLATION_ID || !env.GITHUB_APP_PRIVATE_KEY) {
+    return jsonResponse({ ok: false, error: "GITHUB_APP_NOT_CONFIGURED" }, 503);
+  }
+  try {
+    const payload = await readSubmissionBody(request);
+    const document = normalizeSubmissionDocument(payload && payload.document
+      ? payload.document : payload);
+    validateSubmissionDocument(document);
+    const digest = await sha256Hex(JSON.stringify(document));
+    const path = `submissions/${digest}.json`;
+    const token = await createInstallationToken(env);
+    const content = base64Encode(new TextEncoder().encode(JSON.stringify({
+      document,
+      source: payload && payload.source ? payload.source : "collector",
+      clientVersion: payload && payload.clientVersion ? payload.clientVersion : "unknown"
+    }, null, 2) + "\n"));
+    const settings = config(env);
+    const response = await githubRequest(
+      `https://api.github.com/repos/${encodeURIComponent(settings.owner)}/${encodeURIComponent(settings.repo)}/contents/${path}`,
+      token,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          message: `submit: ${digest.slice(0, 16)}`,
+          content,
+          branch: settings.branch
+        })
+      }
+    );
+    if (response.status === 422) {
+      return jsonResponse({ ok: true, duplicate: true, digest,
+        message: "规则已提交过" });
+    }
+    if (!response.ok) throw new Error(`GitHub contents API ${response.status}`);
+    return jsonResponse({ ok: true, duplicate: false, digest,
+      message: "规则已提交，等待自动校验" }, 202);
+  } catch (error) {
+    return jsonResponse({ ok: false, error: "SUBMISSION_FAILED",
+      message: publicError(error) }, 400);
+  }
+}
+
+async function readSubmissionBody(request) {
+  const maxBytes = 16 * 1024 * 1024 + 256 * 1024;
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > maxBytes) throw new Error("提交内容过大");
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.length === 0 || bytes.length > maxBytes) throw new Error("提交内容大小无效");
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Error("提交内容不是有效 JSON");
+  }
+}
+
+function validateSubmissionDocument(document) {
+  if (!document || typeof document !== "object" || Array.isArray(document)) {
+    throw new Error("提交缺少规则文档");
+  }
+  if (document.schemaVersion !== 3 || !Number.isSafeInteger(document.revision)
+      || document.revision < 1 || !document.algorithm
+      || document.algorithm.id !== "spectral-sequence-v3"
+      || !Array.isArray(document.rules) || document.rules.length > 5000) {
+    throw new Error("提交不是有效的 schemaVersion 3 规则文档");
+  }
+}
+
+function normalizeSubmissionDocument(document) {
+  if (!document || typeof document !== "object" || Array.isArray(document)) {
+    throw new Error("提交缺少规则文档");
+  }
+  if (document.schemaVersion === 3) return document;
+  if (document.schemaVersion !== 1
+      || document.format !== "ad-audio-probe-rules"
+      || document.algorithm !== "spectral-sequence-v1"
+      || !Array.isArray(document.rules)) {
+    throw new Error("提交不是支持的规则文档");
+  }
+
+  const testUrls = { ...(document.testUrls || {}) };
+  const testPositionsMs = { ...(document.testPositionsMs || {}) };
+  const rules = document.rules.map((rule) => {
+    if (!rule || typeof rule !== "object" || !Array.isArray(rule.fingerprints)) {
+      throw new Error("提交规则结构无效");
+    }
+    const fingerprints = rule.fingerprints.map((fingerprint) => ({
+      offsetMs: fingerprint.phaseMs,
+      hashes: fingerprint.hashes
+    }));
+    if (rule.test && typeof rule.test === "object") {
+      if (rule.test.url) testUrls[rule.id] = rule.test.url;
+      if (Number.isSafeInteger(rule.test.adStartMs)) {
+        testPositionsMs[rule.id] = rule.test.adStartMs;
+      }
+    }
+    return {
+      id: rule.id,
+      durationMs: rule.durationMs,
+      anchorOffsetMs: rule.anchorOffsetMs,
+      anchorDurationMs: rule.anchorDurationMs,
+      fingerprints
+    };
+  });
+  const converted = {
+    schemaVersion: 3,
+    revision: Number.isSafeInteger(document.revision) && document.revision > 0
+      ? document.revision : 1,
+    algorithm: {
+      id: "spectral-sequence-v3",
+      sampleRate: 16000,
+      windowMs: 512,
+      hopMs: 256,
+      bandCount: 16
+    },
+    rules
+  };
+  if (Object.keys(testUrls).length) converted.testUrls = testUrls;
+  if (Object.keys(testPositionsMs).length) converted.testPositionsMs = testPositionsMs;
+  return converted;
+}
+
+async function createInstallationToken(env) {
+  const jwt = await createAppJwt(env.GITHUB_APP_ID, env.GITHUB_APP_PRIVATE_KEY);
+  const response = await fetch(
+    `https://api.github.com/app/installations/${encodeURIComponent(env.GITHUB_INSTALLATION_ID)}/access_tokens`,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${jwt}`,
+        "user-agent": "m3u8-ad-audio-rules-sync"
+      }
+    }
+  );
+  if (!response.ok) throw new Error(`GitHub installation token ${response.status}`);
+  const data = await response.json();
+  if (!data.token) throw new Error("GitHub App 未返回安装令牌");
+  return data.token;
+}
+
+async function githubRequest(url, token, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: {
+      accept: "application/vnd.github+json",
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+      "user-agent": "m3u8-ad-audio-rules-sync",
+      ...(options.headers || {})
+    }
+  });
+}
+
+async function createAppJwt(appId, privateKeyPem) {
+  const keyBytes = pemToPkcs8(privateKeyPem);
+  const key = await crypto.subtle.importKey(
+    "pkcs8", keyBytes, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false, ["sign"]
+  );
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlEncode(new TextEncoder().encode(
+    JSON.stringify({ alg: "RS256", typ: "JWT" })
+  ));
+  const payload = base64UrlEncode(new TextEncoder().encode(JSON.stringify({
+    iat: now - 60, exp: now + 540, iss: String(appId).trim()
+  })));
+  const unsigned = `${header}.${payload}`;
+  const signature = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" }, key, new TextEncoder().encode(unsigned)
+  );
+  return `${unsigned}.${base64UrlEncode(new Uint8Array(signature))}`;
+}
+
+function pemToPkcs8(value) {
+  if (typeof value !== "string") throw new Error("GitHub App 私钥无效");
+  const pem = value.trim().replace(/\\n/g, "\n");
+  const pkcs8 = pem.includes("BEGIN PRIVATE KEY");
+  const base64 = pem.replace(/-----BEGIN (?:RSA )?PRIVATE KEY-----/g, "")
+    .replace(/-----END (?:RSA )?PRIVATE KEY-----/g, "").replace(/\s+/g, "");
+  const der = base64Decode(base64);
+  if (pkcs8) return der;
+  // GitHub 常见 RSA PKCS#1 私钥需要包一层 PKCS#8 才能交给 WebCrypto。
+  const algorithm = hexDecode("300d06092a864886f70d0101010500");
+  const version = hexDecode("020100");
+  const octet = concatBytes(hexDecode("04"), derLength(der.length), der);
+  const body = concatBytes(version, algorithm, octet);
+  return concatBytes(hexDecode("30"), derLength(body.length), body);
+}
+
+function derLength(length) {
+  if (length < 128) return new Uint8Array([length]);
+  const bytes = [];
+  let value = length;
+  while (value > 0) { bytes.unshift(value & 255); value >>>= 8; }
+  return new Uint8Array([0x80 | bytes.length, ...bytes]);
+}
+
+function base64Decode(value) {
+  const binary = atob(value);
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+function base64Encode(bytes) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function base64UrlEncode(bytes) {
+  return base64Encode(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function hexDecode(value) {
+  const result = new Uint8Array(value.length / 2);
+  for (let index = 0; index < result.length; index++) {
+    result[index] = parseInt(value.slice(index * 2, index * 2 + 2), 16);
+  }
+  return result;
+}
+
+
+function concatBytes(first, second, third) {
+  const result = new Uint8Array(first.length + second.length + (third ? third.length : 0));
+  result.set(first, 0); result.set(second, first.length);
+  if (third) result.set(third, first.length + second.length);
+  return result;
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function publicError(error) {
+  const message = error && error.message ? error.message : "远端服务暂时不可用";
+  return message.length > 160 ? message.slice(0, 160) : message;
 }
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {

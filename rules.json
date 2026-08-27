@@ -1,7 +1,7 @@
 {
   "format": "ad-audio-probe-rules",
   "schemaVersion": 1,
-  "revision": 2,
+  "revision": 3,
   "algorithm": "spectral-sequence-v1",
   "rules": [
     {
@@ -105,6 +105,109 @@
       "test": {
         "url": "https://oss.douyinbit.com/m3u8/c3680ce0df8971d518be669d84ef9eef.m3u8",
         "adStartMs": 15000
+      }
+    },
+    {
+      "id": "ad-1787848188106-1",
+      "durationMs": 55000,
+      "anchorOffsetMs": 0,
+      "anchorDurationMs": 5000,
+      "fingerprints": [
+        {
+          "phaseMs": 0,
+          "hashes": [
+            "00000000",
+            "38ff081f",
+            "39fd083f",
+            "3dbc07bf",
+            "3dac00ff",
+            "39ac1ca7",
+            "374c01cf",
+            "3bbe00bf",
+            "bb58034e",
+            "274801ec",
+            "274601f3",
+            "1076003f",
+            "36f702ff",
+            "3aac022f",
+            "3d96841f",
+            "b75a035e",
+            "13260327",
+            "36ec02ef"
+          ]
+        },
+        {
+          "phaseMs": 64,
+          "hashes": [
+            "536d0120",
+            "38df081f",
+            "3bfd00ff",
+            "3cbc0fbf",
+            "39ac00ff",
+            "b1ec1dee",
+            "3b5c017f",
+            "3a9a001f",
+            "b358034c",
+            "35cb01eb",
+            "2f660177",
+            "12f6003f",
+            "37f500ff",
+            "3aac0a2f",
+            "3c5a041f",
+            "375a035e",
+            "132403a7",
+            "36cc03ef"
+          ]
+        },
+        {
+          "phaseMs": 128,
+          "hashes": [
+            "2e3d000f",
+            "39fb081f",
+            "3bb901ff",
+            "3cac0eff",
+            "39ac182f",
+            "b74801cc",
+            "3b5c01ff",
+            "3a5a000e",
+            "b75803cc",
+            "354305f3",
+            "3b660177",
+            "16f6003f",
+            "3eb400ff",
+            "38ae880f",
+            "3f5a035f",
+            "335e015f",
+            "376403e6",
+            "374903ed"
+          ]
+        },
+        {
+          "phaseMs": 192,
+          "hashes": [
+            "3abd000f",
+            "39fb081f",
+            "3fb901ff",
+            "3cac04ff",
+            "39ac1caf",
+            "374801cf",
+            "3bbe00ff",
+            "bb480b4e",
+            "a74803ec",
+            "374301f3",
+            "11760137",
+            "36f7027f",
+            "3ea40237",
+            "3dde841f",
+            "b75a035e",
+            "13560157",
+            "366c03e6"
+          ]
+        }
+      ],
+      "test": {
+        "url": "https://oss.douyinbit.com/m3u8/e1f77afeac8642b4c48e68956e36e008.m3u8",
+        "adStartMs": 0
       }
     },
     {

@@ -1,0 +1,11 @@
+{
+  "document": {
+    "format": "ad-audio-probe-rules",
+    "schemaVersion": 1,
+    "revision": 1,
+    "algorithm": "spectral-sequence-v1",
+    "rules": []
+  },
+  "source": "collector",
+  "clientVersion": "collector"
+}
